@@ -5,7 +5,7 @@ CREATE TABLE  MotionPicture
 name VARCHAR(255) NOT NULL, 
 rating FLOAT, 
 production VARCHAR(255),
-budget INT, 
+budget BIGINT, 
 PRIMARY KEY (id), 
 CHECK (rating >= 0 AND rating <= 10 AND budget > 0));
 
