@@ -26,7 +26,7 @@ def search_movie():
     #              List the movie `name`, `rating`, `production` and `budget`.
 
     query = ""
-    query = """SELECT name, rating, production, budget FROM MotionPicture WHERE name LIKE %s"""
+    query = """SELECT name, rating, production, budget FROM MotionPicture WHERE name = %s"""
     
     with Database() as db:
         movies = db.execute(query, (f"%{movie_name}%",))
@@ -41,7 +41,7 @@ def search_liked_movies():
     # >>>> TODO 3: Find the movies that have been liked by a specific user’s email. <<<<
     #              List the movie `name`, `rating`, `production` and `budget`.
 
-    query = "SELECT m.name, m.rating, m.production, m.budget  FROM MotionPicture M, Likes P where M.id = P.mpid and P.uemail = %s"
+    query = "SELECT m.name, m.rating, m.production, m.budget  FROM MotionPicture M, Likes P where M.id = P.mpid and P.uemail = %s and M.id in (select mpid from Movie)"
 
     with Database() as db:
         movies = db.execute(query, (user_email,))
@@ -56,7 +56,7 @@ def search_by_country():
     # >>>> TODO 4: Search motion pictures by their shooting location country. <<<<
     #              List only the motion picture names without any duplicates.
 
-    query = """SELECT name FROM MotionPicture WHERE id IN (SELECT mpid FROM Location WHERE country LIKE %s)"""
+    query = """SELECT name FROM MotionPicture WHERE id IN (SELECT mpid FROM Location WHERE country = %s)"""
 
     with Database() as db:
         movies = db.execute(query, (country,))
@@ -71,7 +71,7 @@ def search_directors_by_zip():
     # >>>> TODO 5: List all directors who have directed TV series shot in a specific zip code. <<<<
     #              List the director name and TV series name only without duplicates.
 
-    query = """ Select DISTINCT MotionPicture.name, People.name FROM role, MotionPicture, Likes, People, Location, Series
+    query = """ Select DISTINCT People.name, MotionPicture.name FROM role, MotionPicture, Likes, People, Location, Series
                 where role_name = "Director" AND role.mpid = Location.mpid AND Location.zip = %s
                 and role.mpid = MotionPicture.id AND Series.mpid = MotionPicture.id and People.id = role.pid;"""
 
@@ -88,7 +88,11 @@ def search_awards():
     # >>>> TODO 6: Find the people who have received more than “k” awards for a single motion picture in the same year. <<<<
     #              List the person `name`, `motion picture name`, `award year` and `award count`.
 
-    query = """SELECT P.name, M.name, award_year, COUNT(*) AS award_count FROM People P, MotionPicture M, Award A WHERE P.id = A.pid AND M.id = A.mpid GROUP BY P.name, M.name, award_year HAVING COUNT(*) > %s"""
+    query = """SELECT P.name, M.name, award_year, COUNT(*) AS award_count 
+                FROM People P, MotionPicture M, Award A 
+                WHERE P.id = A.pid AND M.id = A.mpid 
+                GROUP BY P.name, M.name, award_year 
+                HAVING award_count > %s"""
 
     with Database() as db:
         results = db.execute(query, (k,))
@@ -107,7 +111,8 @@ def find_youngest_oldest_actors():
     #              The age should be computed from the person’s date of birth to the award winning year only. 
     #              In case of a tie, list all of them.
 
-    query = """ select people.name, CAST(Award.award_year as INT) - CAST(YEAR(People.dob) as INT)  from People, Award 
+    query = """ select people.name, CAST(Award.award_year as INT) - CAST(YEAR(People.dob) as INT)  
+                from People, Award 
                 where Award.pid = people.id  """
 
     with Database() as db:
@@ -142,7 +147,10 @@ def search_producers():
     # >>>> TODO 8: Find the American [USA] Producers who had a box office collection of more than or equal to “X” with a budget less than or equal to “Y”. <<<< 
     #              List the producer `name`, `movie name`, `box office collection` and `budget`.
 
-    query = """SELECT MP.Production, MP.name, M.boxoffice_collection, MP.budget FROM MotionPicture MP, Movie M WHERE MP.id = M.mpid AND MP.id IN (SELECT mpid FROM Location WHERE country = 'USA') AND M.boxoffice_collection >= %s AND MP.budget <= %s"""
+    query = """SELECT MP.Production, MP.name, M.boxoffice_collection, MP.budget 
+                FROM MotionPicture MP, Movie M 
+                WHERE MP.id = M.mpid AND MP.id IN (SELECT mpid FROM Location WHERE country = 'USA') 
+                AND M.boxoffice_collection >= %s AND MP.budget <= %s"""
 
     with Database() as db:
         results = db.execute(query, (box_office_min, budget_max))
@@ -161,7 +169,7 @@ def search_multiple_roles():
 
     query = """SELECT P.name, MP.name, Count(R1.role_name) as role_count
                 FROM MotionPicture MP, People P, Role R1
-                where  MP.rating > %s and MP.id = R1.mpid and MP.id = R1.mpid and P.id = R1.pid
+                where  MP.rating > %s and MP.id = R1.mpid and P.id = R1.pid
                 GROUP BY P.name, MP.name
                 HAVING role_count > 1;"""
 
@@ -178,7 +186,11 @@ def top_thriller_movies_boston():
     #               This means that the movie cannot have any other shooting location. 
     #               List the `movie names` and their `ratings`.
 
-    query = """SELECT name, rating FROM MotionPicture WHERE id IN (SELECT mpid FROM Genre WHERE genre_name = 'Thriller') AND id NOT IN (SELECT mpid FROM Location WHERE city != 'Boston') ORDER BY rating DESC LIMIT 2"""
+    query = """SELECT name, rating FROM MotionPicture 
+                WHERE id IN (SELECT mpid FROM Genre WHERE genre_name = 'Thriller') 
+                AND id NOT IN (SELECT mpid FROM Location WHERE city != 'Boston') 
+                AND id IN (SELECT mpid FROM Movie)
+                ORDER BY rating DESC LIMIT 2"""
 
     with Database() as db:
         results = db.execute(query)
@@ -198,8 +210,9 @@ def search_movies_by_likes():
     # >>>> TODO 11: Find all the movies with more than “X” likes by users of age less than “Y”. <<<<
     #               List the movie names and the number of likes by those age-group users.
 
-    query = """select MotionPicture.name, Count(uemail) as num_likes from likes L, Users U, MotionPicture
-                where U.age < %s and MotionPicture.id = L.mpid and MotionPicture.id in (select mpid from Movie)
+    query = """select MotionPicture.name, Count(uemail) as num_likes 
+                from likes L, Users U, MotionPicture
+                where U.age < %s and L.uemail = U.email and MotionPicture.id = L.mpid and MotionPicture.id in (select mpid from Movie)
                 group by L.mpid
                 Having num_likes > %s; """
 
@@ -217,7 +230,11 @@ def actors_marvel_warner():
     # >>>> TODO 12: Find the actors who have played a role in both “Marvel” and “Warner Bros” productions. <<<<
     #               List the `actor names` and the corresponding `motion picture names`.
 
-    query = """WITH X AS (SELECT pid, production FROM Role JOIN MotionPicture ON mpid = id) SELECT P.name, M.name FROM People P JOIN Role R ON P.id = R.pid JOIN MotionPicture M ON R.mpid = M.id WHERE P.id IN (SELECT pid FROM Role WHERE role_name = 'Actor') AND P.id IN (SELECT pid FROM X WHERE production = 'Marvel') AND P.id IN (SELECT pid FROM X WHERE Production = 'Warner Bros')"""
+    query = """WITH X AS (SELECT pid, production FROM Role JOIN MotionPicture ON mpid = id) 
+               SELECT P.name, M.name FROM People P JOIN Role R ON P.id = R.pid JOIN MotionPicture M ON R.mpid = M.id 
+               WHERE P.id IN (SELECT pid FROM Role WHERE role_name = 'Actor') 
+               AND P.id IN (SELECT pid FROM X WHERE production = 'Marvel') 
+               AND P.id IN (SELECT pid FROM X WHERE Production = 'Warner Bros')"""
 
     with Database() as db:
         results = db.execute(query)
@@ -234,8 +251,8 @@ def movies_higher_than_comedy_avg():
     #               Show the names and ratings in descending order of ratings.
 
     query = """Select MP.name, MP.rating from MotionPicture MP 
-            where MP.rating > (select Avg(MP.rating ) from MotionPicture MP, Genre G 
-                            where MP.id = G.mpid and G.genre_name = "comedy") 
+                where MP.rating > (select Avg(MP.rating ) from MotionPicture MP, Genre G 
+                                    where MP.id = G.mpid and G.genre_name = "comedy" and MP.id in (select mpid from Movie)) 
                 order by Mp.rating desc"""
 
     with Database() as db:
@@ -252,7 +269,11 @@ def top_5_movies_people_roles():
     # >>>> TODO 14: Find the top 5 movies with the highest number of people playing a role in that movie. <<<<
     #               Show the `movie name`, `people count` and `role count` for the movies.
 
-    query = """SELECT M.name, COUNT(DISTINCT P.id) AS people_count, COUNT(DISTINCT R.role_name) AS role_count FROM MotionPicture M JOIN Role R ON M.id = R.mpid JOIN People P ON R.pid = P.id GROUP BY M.name ORDER BY people_count DESC, role_count DESC LIMIT 5"""
+    query = """SELECT M.name, COUNT(DISTINCT P.id) AS people_count, COUNT( R.role_name) AS role_count 
+                FROM MotionPicture M JOIN Role R ON M.id = R.mpid JOIN People P ON R.pid = P.id 
+                where M.id in (select mpid from Movie)
+                GROUP BY M.id 
+                ORDER BY people_count DESC, role_count DESC LIMIT 5"""
 
     with Database() as db:
         results = db.execute(query)
